@@ -1,0 +1,13 @@
+{
+    "search_terms": [
+        "mountain bike"
+    ],
+    "min_price": 200,
+    "max_price": 750,
+    "location": "madrid",
+    "radius_km": 50,
+    "headless_browser": false,
+    "save_images": false,
+    "max_results": 100,
+    "send_email": false
+}
