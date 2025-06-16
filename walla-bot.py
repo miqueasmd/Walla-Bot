@@ -31,12 +31,17 @@ from selenium.webdriver.common.keys import Keys
 
 # --- CONSTANTS ---
 CONFIG_FILE = 'config.json'
-SEEN_ADS_FILE = 'seen_ads.txt'
+SEEN_ADS_FILE = 'data/seen_ads.txt'
 IMAGES_DIR = "product_images"
+CSV_DIR = "data/csv"
+SCREENSHOTS_DIR = "data/screenshots"
 
 # --- LOGGING SETUP ---
 def setup_logger():
     os.makedirs("logs", exist_ok=True)
+    os.makedirs(CSV_DIR, exist_ok=True)
+    os.makedirs(SCREENSHOTS_DIR, exist_ok=True)
+    os.makedirs("data", exist_ok=True)
     log = logging.getLogger("wallabot")
     log.setLevel(logging.INFO)
     handler = TimedRotatingFileHandler(
@@ -324,7 +329,7 @@ def main():
             load_all_results(driver, config.get('max_results', 40))
             timestamp = time.strftime("%Y%m%d-%H%M%S")
             clean_keyword = re.sub(r'[^a-zA-Z0-9]+', '_', search_term)
-            screenshot_path = f"wallapop_search_{clean_keyword}_{timestamp}_screenshot.png"
+            screenshot_path = os.path.join(SCREENSHOTS_DIR, f"wallapop_search_{clean_keyword}_{timestamp}_screenshot.png")
             driver.save_screenshot(screenshot_path)
             logger.info(f"Screenshot saved to {screenshot_path}")
             seen_ads = load_seen_ads()
@@ -344,7 +349,7 @@ def main():
             df = pd.DataFrame(new_ads, columns=columns)
             if 'price' in df.columns:
                 df['price'] = pd.to_numeric(df['price'], errors='coerce')
-            csv_file_path = f"wallapop_results_{timestamp}.csv"
+            csv_file_path = os.path.join(CSV_DIR, f"wallapop_results_{timestamp}.csv")
             df.to_csv(csv_file_path, index=False)
             logger.info(f"Results saved to {csv_file_path}")
             if config.get('send_email', True):
