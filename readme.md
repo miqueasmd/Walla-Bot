@@ -135,12 +135,15 @@ python test_wallabot_results.py
 - `walla-bot.py`: Main bot script that performs the Wallapop scraping, deduplication, CSV export, and (optionally) email notification.
 - `config.json`: Main configuration file for search terms, filters, and bot options.
 - `.env`: Stores secret credentials (never commit this file!).
-- `seen_ads.txt`: Tracks IDs of ads already processed to prevent duplicate notifications.
+- `data/`: Directory containing all data files:
+  - `seen_ads.txt`: Tracks IDs of ads already processed to prevent duplicate notifications.
+  - `csv/`: Contains timestamped CSV files with the results of each run.
+  - `screenshots/`: Stores screenshots of search results for each run.
 - `logs/`: Contains daily rotating log files for monitoring and debugging.
 - `product_images/`: Stores downloaded images if `save_images` is enabled.
-- `*.csv`: Timestamped CSV files with the results of each run.
 - `test_wallabot_results.py`: Automated test script to run the bot with different settings (e.g., various `max_results`) for validation and performance testing. Disables email and image downloads for fast, repeatable tests.
 - `wallapop_automation.ipynb`: Jupyter notebook for prototyping, step-by-step exploration, and ad-hoc data analysis. Useful for development, debugging, or educational purposes.
+- `wallapop_automation_demo.mp4`: Video demonstration of the bot in action, showing the automation process and features.
 
 ---
 
