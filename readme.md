@@ -50,11 +50,11 @@ cp .env.sample .env  # or create manually
 # then fill the three vars shown below
 ```
 
-| Variable                   | Description                        |
-|----------------------------|------------------------------------|
-| WALLABOT_SENDER_EMAIL      | Gmail address to send alerts from  |
-| WALLABOT_APP_PASSWORD      | Google App Password for sender     |
-| WALLABOT_RECIPIENT_EMAIL   | Email address to receive alerts    |
+| Variable                   | Description                                                      |
+|----------------------------|------------------------------------------------------------------|
+| WALLABOT_SENDER_EMAIL      | Email address to send alerts from (any SMTP-compatible provider)  |
+| WALLABOT_APP_PASSWORD      | Email password or app password (depends on your provider)         |
+| WALLABOT_RECIPIENT_EMAIL   | Email address to receive alerts                                   |
 
 ### 5. Configure Your Search in config.json
 Example:
@@ -68,7 +68,8 @@ Example:
     "headless_browser": false,
     "save_images": false,
     "max_results": 100,
-    "send_email": false
+    "send_email": false,
+    "combine_results": false
 }
 ```
 
@@ -83,6 +84,7 @@ Example:
 | save_images      | bool      | Download images (default: false)                                            |
 | headless_browser | bool      | Run Chrome headless (default: true)                                         |
 | send_email       | bool      | Send email alerts (default: true)                                           |
+| combine_results  | bool      | If true, all search results are combined into a single CSV with a search_term column. If false, each search term gets its own CSV. (default: false) |
 
 ---
 
@@ -102,7 +104,7 @@ cp .env.sample .env
 
 ### Run automated tests
 ```bash
-python test_wallabot_results.py
+python test_wallabot.py
 ```
 - This script runs the bot with different `max_results` values and disables email/images for fast testing.
 
@@ -141,7 +143,7 @@ python test_wallabot_results.py
   - `screenshots/`: Stores screenshots of search results for each run.
 - `logs/`: Contains daily rotating log files for monitoring and debugging.
 - `product_images/`: Stores downloaded images if `save_images` is enabled.
-- `test_wallabot_results.py`: Automated test script to run the bot with different settings (e.g., various `max_results`) for validation and performance testing. Disables email and image downloads for fast, repeatable tests.
+- `test_wallabot.py`: Automated test script to run the bot with different settings (e.g., various `max_results`) for validation and performance testing. Disables email and image downloads for fast, repeatable tests.
 - `wallapop_automation.ipynb`: Jupyter notebook for prototyping, step-by-step exploration, and ad-hoc data analysis. Useful for development, debugging, or educational purposes.
 - `wallapop_automation_demo.mp4`: Video demonstration of the bot in action, showing the automation process and features.
 

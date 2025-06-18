@@ -1,24 +1,30 @@
 #!/usr/bin/env python
 # walla-bot.py
 
+# Standard library imports
 import json
 import os
 import time
 import smtplib
-import requests
-import pandas as pd
-from urllib.parse import urlparse
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
-from email.mime.application import MIMEApplication
-from email.mime.image import MIMEImage
 import re
-from dotenv import load_dotenv
 import logging
 import gzip
 import shutil
 from logging.handlers import TimedRotatingFileHandler
+from urllib.parse import urlparse
 
+# Third-party library imports
+import requests
+import pandas as pd
+from dotenv import load_dotenv
+
+# Email handling (for sending notifications)
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+from email.mime.application import MIMEApplication
+from email.mime.image import MIMEImage
+
+# Selenium and browser automation
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
@@ -35,6 +41,7 @@ SEEN_ADS_FILE = 'data/seen_ads.txt'
 IMAGES_DIR = "product_images"
 CSV_DIR = "data/csv"
 SCREENSHOTS_DIR = "data/screenshots"
+CSV_PATTERN = 'data/csv/wallapop_results_*.csv'
 
 # --- LOGGING SETUP ---
 def setup_logger():
@@ -132,7 +139,7 @@ def initialize_driver(config):
     return webdriver.Chrome(service=service, options=options)
 
 def click_load_more(driver):
-    """Trata de hacer click en el botón 'load more' por ID o por fallback a walla-button con shadow DOM."""
+    """Attempts to click the 'load more' button by ID or fallback to walla-button with shadow DOM."""
     try:
         load_more_button_host = driver.find_element(By.CSS_SELECTOR, "#btn-load-more")
         driver.execute_script('arguments[0].shadowRoot.querySelector("button").click()', load_more_button_host)
@@ -156,26 +163,26 @@ def click_load_more(driver):
         return False
 
 def load_all_results(driver, max_results):
-    """Haz scroll y pulsa 'load more' hasta que llegues a max_results o no salgan más."""
+    """Scrolls and clicks 'load more' until reaching max_results or no more results appear."""
     last_count = 0
     attempts_without_growth = 0
     while True:
-        # 1) si hay botón → clic
+        # 1) if there is a button → click
         clicked = click_load_more(driver)
         if clicked:
             time.sleep(2)
-        # 2) scroll suave hasta el final de la página
+        # 2) smooth scroll to the bottom of the page
         driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
         time.sleep(2)
-        # 3) cuántas tarjetas tenemos ahora
-        cards = driver.find_elements(By.CSS_SELECTOR, "a.ItemCardList__item")
+        # 3) how many cards do we have now
+        cards = driver.find_elements(By.CSS_SELECTOR, "a[href^='/item/']")
         current = len(cards)
         print(f"Current number of product cards: {current}")
-        # 4) ¿hemos llegado al tope?
+        # 4) have we reached the limit?
         if current >= max_results:
             print(f"Reached {current} results (>= {max_results}).")
             break
-        # 5) si no crece en dos iteraciones, salimos
+        # 5) if we don't grow in two iterations, we exit
         if current == last_count:
             attempts_without_growth += 1
             if attempts_without_growth >= 2:
@@ -189,7 +196,7 @@ def extract_new_ads(driver, seen_ads, config):
     """Extracts all product data from the page and returns only the new ones."""
     new_ads = []
     max_results = config.get('max_results', 40)
-    product_cards = driver.find_elements(By.CSS_SELECTOR, "a.ItemCardList__item")
+    product_cards = driver.find_elements(By.CSS_SELECTOR, "a[href^='/item/']")
     extracted_at = time.strftime('%Y-%m-%d %H:%M:%S')
     for card in product_cards[:max_results]:
         try:
@@ -205,7 +212,7 @@ def extract_new_ads(driver, seen_ads, config):
                     title = card.find_element(By.CSS_SELECTOR, '.ItemCard__title').text
                 except NoSuchElementException:
                     continue
-            price_element = card.find_element(By.CSS_SELECTOR, ".ItemCard__price")
+            price_element = card.find_element(By.CSS_SELECTOR, "[class*='ItemCard__price']")
             price_text = price_element.text
             price = (price_text.replace('€','').replace('.','').replace(',','.').strip()).replace('\u00A0','')
             try:
@@ -246,7 +253,7 @@ def download_images(new_ads):
             except requests.RequestException as e:
                 print(f"Failed to download image for {ad['title']}: {e}")
 
-def send_email_alert(new_ads, config, csv_file_path=None, screenshot_path=None):
+def send_email_alert(new_ads, config, csv_file_path=None, screenshot_paths=None):
     """Sends an email with the new ads and optional attachments."""
     if not new_ads:
         logger.info("No new ads found. No email will be sent.")
@@ -255,10 +262,16 @@ def send_email_alert(new_ads, config, csv_file_path=None, screenshot_path=None):
     sender = SENDER_EMAIL
     password = APP_PASSWORD
     now_str = time.strftime('%Y-%m-%d %H:%M')
+    # Determine search terms for subject
+    search_terms = config.get('search_terms')
+    if not search_terms:
+        search_terms = [config.get('search_term')]
+    subject_terms = ', '.join(search_terms)
     msg = MIMEMultipart('related')
-    msg['Subject'] = f"Wallapop Alert: {now_str} - {len(new_ads)} new ad(s) for '{', '.join([ad['title'] for ad in new_ads])}'"
+    msg['Subject'] = f"Wallapop Alert: {now_str} - {len(new_ads)} new ad(s) for {subject_terms}"
     msg['From'] = f"Walla-Bot <{sender}>"
     msg['To'] = recipient
+    # msg ['Bcc']= if you want to send a copy to yourself
     alt_part = MIMEMultipart('alternative')
     msg.attach(alt_part)
     html_body = f"<h1>New deals found</h1>"
@@ -271,15 +284,20 @@ def send_email_alert(new_ads, config, csv_file_path=None, screenshot_path=None):
             part['Content-Disposition'] = f'attachment; filename="{os.path.basename(csv_file_path)}"'
             msg.attach(part)
             logger.info(f"Attached CSV: {csv_file_path}")
-    if screenshot_path and os.path.exists(screenshot_path):
-        with open(screenshot_path, 'rb') as img_file:
-            img = MIMEImage(img_file.read(), name=os.path.basename(screenshot_path))
-            img.add_header('Content-Disposition', 'attachment', filename=os.path.basename(screenshot_path))
-            msg.attach(img)
-            logger.info(f"Attached screenshot: {screenshot_path}")
+    # Attach one or more screenshots
+    if screenshot_paths:
+        if isinstance(screenshot_paths, str):
+            screenshot_paths = [screenshot_paths]
+        for screenshot_path in screenshot_paths:
+            if screenshot_path and os.path.exists(screenshot_path):
+                with open(screenshot_path, 'rb') as img_file:
+                    img = MIMEImage(img_file.read(), name=os.path.basename(screenshot_path))
+                    img.add_header('Content-Disposition', 'attachment', filename=os.path.basename(screenshot_path))
+                    msg.attach(img)
+                    logger.info(f"Attached screenshot: {screenshot_path}")
     try:
         logger.info(f"Connecting to SMTP server to send email to {recipient}...")
-        with smtplib.SMTP('smtp.gmail.com', 587) as server:
+        with smtplib.SMTP('mail.mmdlab.tech', 587) as server: # or smtp.gmail.com
             server.starttls()
             server.login(sender, password)
             server.send_message(msg)
@@ -300,8 +318,10 @@ def main():
     if not search_terms:
         search_terms = [config.get('search_term')]
     all_new_ads = []
+    all_screenshots = []
+    all_csv_files = []
+    combine_results = config.get('combine_results', False)
     driver = initialize_driver(config)
-    screenshot_path = None
     try:
         for search_term in search_terms:
             logger.info(f"Searching for: {search_term}")
@@ -332,6 +352,7 @@ def main():
             screenshot_path = os.path.join(SCREENSHOTS_DIR, f"wallapop_search_{clean_keyword}_{timestamp}_screenshot.png")
             driver.save_screenshot(screenshot_path)
             logger.info(f"Screenshot saved to {screenshot_path}")
+            all_screenshots.append(screenshot_path)
             seen_ads = load_seen_ads()
             new_ads = extract_new_ads(driver, seen_ads, config)
             if not new_ads:
@@ -340,22 +361,45 @@ def main():
             logger.info(f"Found a total of {len(new_ads)} new ads for '{search_term}'.")
             if config.get('save_images'):
                 download_images(new_ads)
-            # --- Dynamic CSV columns ---
-            # Only include columns present in the data
+            # Add search_term to each ad for DA mode
+            if combine_results:
+                for ad in new_ads:
+                    ad['search_term'] = search_term
+            # --- Consistent CSV column order ---
+            # Define the preferred column order for better readability
+            preferred_columns = ['id', 'title', 'price', 'link', 'extracted_at_date']
+            if combine_results:
+                preferred_columns.append('search_term')
+            if config.get('save_images', False):
+                preferred_columns.extend(['image_url', 'image_path'])
+            
+            # Get all actual keys from the data
             all_keys = set()
             for ad in new_ads:
                 all_keys.update(ad.keys())
-            columns = list(all_keys)
-            df = pd.DataFrame(new_ads, columns=columns)
+            
+            # Create ordered columns: preferred columns first, then any remaining ones
+            ordered_columns = []
+            for col in preferred_columns:
+                if col in all_keys:
+                    ordered_columns.append(col)
+            # Add any remaining columns that weren't in preferred_columns
+            for col in sorted(all_keys):
+                if col not in ordered_columns:
+                    ordered_columns.append(col)
+            
+            df = pd.DataFrame(new_ads, columns=ordered_columns)
             if 'price' in df.columns:
                 df['price'] = pd.to_numeric(df['price'], errors='coerce')
-            csv_file_path = os.path.join(CSV_DIR, f"wallapop_results_{timestamp}.csv")
-            df.to_csv(csv_file_path, index=False)
-            logger.info(f"Results saved to {csv_file_path}")
-            if config.get('send_email', True):
-                send_email_alert(new_ads, config, csv_file_path, screenshot_path)
-            else:
-                logger.info("send_email is False: Skipping email sending for this run.")
+            csv_file_path = os.path.join(CSV_DIR, f"wallapop_results_{clean_keyword}_{timestamp}.csv")
+            if not combine_results:
+                df.to_csv(csv_file_path, index=False)
+                all_csv_files.append(csv_file_path)
+                logger.info(f"Results saved to {csv_file_path}")
+                if config.get('send_email', True):
+                    send_email_alert(new_ads, config, csv_file_path, screenshot_path)
+                else:
+                    logger.info("send_email is False: Skipping email sending for this run.")
             for ad in new_ads:
                 save_seen_ad(ad['id'])
             logger.info(f"Updated seen_ads.txt with {len(new_ads)} new ad IDs.")
@@ -364,6 +408,41 @@ def main():
         unique_ads = {ad['id']: ad for ad in all_new_ads}.values()
         unique_ads = list(unique_ads)
         logger.info(f"Total unique new ads found in this run: {len(unique_ads)}")
+        # DA mode: combine results and send one email
+        if combine_results and unique_ads:
+            # --- Consistent CSV column order for combined results ---
+            # Define the preferred column order for better readability
+            preferred_columns = ['id', 'title', 'price', 'link', 'extracted_at_date', 'search_term']
+            if config.get('save_images', False):
+                preferred_columns.extend(['image_url', 'image_path'])
+            
+            # Get all actual keys from the data
+            all_keys = set()
+            for ad in unique_ads:
+                all_keys.update(ad.keys())
+            
+            # Create ordered columns: preferred columns first, then any remaining ones
+            ordered_columns = []
+            for col in preferred_columns:
+                if col in all_keys:
+                    ordered_columns.append(col)
+            # Add any remaining columns that weren't in preferred_columns
+            for col in sorted(all_keys):
+                if col not in ordered_columns:
+                    ordered_columns.append(col)
+            
+            df = pd.DataFrame(unique_ads, columns=ordered_columns)
+            if 'price' in df.columns:
+                df['price'] = pd.to_numeric(df['price'], errors='coerce')
+            timestamp = time.strftime("%Y%m%d-%H%M%S")
+            csv_file_path = os.path.join(CSV_DIR, f"wallapop_results_combined_{timestamp}.csv")
+            df.to_csv(csv_file_path, index=False)
+            logger.info(f"Combined results saved to {csv_file_path}")
+            if config.get('send_email', True):
+                # Attach all screenshots, one CSV
+                send_email_alert(unique_ads, config, csv_file_path, all_screenshots)
+            else:
+                logger.info("send_email is False: Skipping email sending for combined results.")
     except TimeoutException:
         logger.error("Page took too long to load or an element was not found.")
         driver.save_screenshot("debug_screenshot.png")

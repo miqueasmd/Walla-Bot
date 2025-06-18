@@ -1,6 +1,6 @@
 {
     "search_terms": [
-        "mountain bike"
+        "iphone 15"
     ],
     "min_price": 200,
     "max_price": 750,
@@ -8,6 +8,7 @@
     "radius_km": 50,
     "headless_browser": false,
     "save_images": false,
-    "max_results": 100,
-    "send_email": false
+    "max_results": 20,
+    "send_email": true,
+    "combine_results": false
 }
