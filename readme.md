@@ -145,7 +145,7 @@ python test_wallabot.py
 - `product_images/`: Stores downloaded images if `save_images` is enabled.
 - `test_wallabot.py`: Automated test script to run the bot with different settings (e.g., various `max_results`) for validation and performance testing. Disables email and image downloads for fast, repeatable tests.
 - `wallapop_automation.ipynb`: Jupyter notebook for prototyping, step-by-step exploration, and ad-hoc data analysis. Useful for development, debugging, or educational purposes.
-- `wallapop_automation_demo.mp4`: Video demonstration of the bot in action, showing the automation process and features.
+- `walla-bot_automation_demo.mp4`: Video demonstration of the bot in action, showing the automation process and features.
 
 ---
 
